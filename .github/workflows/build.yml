@@ -459,6 +459,19 @@ jobs:
                   ws.setMediaPlaybackRequiresUserGesture(false);
                   w.setWebViewClient(new WebViewClient() {
                       @Override
+                      public void onPageFinished(final WebView view, String url) {
+                          // Start the page's video once, muted, after it has loaded
+                          view.postDelayed(new Runnable() {
+                              @Override
+                              public void run() {
+                                  view.evaluateJavascript(
+                                          "(function(){var v=document.querySelector('video');"
+                                                  + "if(v){v.muted=true;v.loop=true;v.play();}})();", null);
+                              }
+                          }, 1500);
+                      }
+
+                      @Override
                       public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                           if (request.isForMainFrame()) toast("Page failed to load");
                       }
