@@ -19,6 +19,599 @@ jobs:
         with:
           gradle-version: 8.7
 
+      - name: Create project files
+        run: |
+          mkdir -p app/src/main/java/com/example/bgvideo app/src/main/res/layout app/src/main/res/values
+          cat > settings.gradle <<'END_FILE_0'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "BGVideo"
+          include ':app'
+          END_FILE_0
+          cat > build.gradle <<'END_FILE_1'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+          }
+          END_FILE_1
+          cat > gradle.properties <<'END_FILE_2'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          END_FILE_2
+          cat > app/build.gradle <<'END_FILE_3'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.example.bgvideo'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.example.bgvideo"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+
+              lint {
+                  abortOnError false
+              }
+          }
+
+          dependencies {
+              def media3 = "1.3.1"
+              implementation "androidx.media3:media3-exoplayer:$media3"
+              implementation "androidx.media3:media3-exoplayer-hls:$media3"
+              implementation "androidx.media3:media3-ui:$media3"
+              implementation "androidx.media3:media3-session:$media3"
+              implementation "androidx.appcompat:appcompat:1.6.1"
+          }
+          END_FILE_3
+          cat > app/src/main/AndroidManifest.xml <<'END_FILE_4'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
+                  android:usesCleartextTraffic="false">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+
+                  <service
+                      android:name=".PlaybackService"
+                      android:exported="true"
+                      android:foregroundServiceType="mediaPlayback">
+                      <intent-filter>
+                          <action android:name="androidx.media3.session.MediaSessionService" />
+                      </intent-filter>
+                  </service>
+
+              </application>
+          </manifest>
+          END_FILE_4
+          cat > app/src/main/res/values/strings.xml <<'END_FILE_5'
+          <resources>
+              <string name="app_name">BG Video Player</string>
+              <string name="channel_name">Video playback</string>
+          </resources>
+          END_FILE_5
+          cat > app/src/main/res/layout/activity_main.xml <<'END_FILE_6'
+          <?xml version="1.0" encoding="utf-8"?>
+          <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:app="http://schemas.android.com/apk/res-auto"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:fitsSystemWindows="true"
+              android:orientation="vertical"
+              android:padding="12dp">
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="horizontal">
+
+                  <EditText
+                      android:id="@+id/url_input"
+                      android:layout_width="0dp"
+                      android:layout_height="wrap_content"
+                      android:layout_weight="1"
+                      android:hint="YouTube, Instagram or direct .mp4 / .m3u8 link"
+                      android:importantForAutofill="no"
+                      android:inputType="textUri"
+                      android:singleLine="true" />
+
+                  <Button
+                      android:id="@+id/load_btn"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Load" />
+
+                  <Button
+                      android:id="@+id/reload_btn"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Reload" />
+
+                  <Button
+                      android:id="@+id/stop_btn"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Stop" />
+              </LinearLayout>
+
+              <TextView
+                  android:id="@+id/status_text"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:paddingTop="8dp"
+                  android:paddingBottom="8dp"
+                  android:text="Status: Idle" />
+
+              <androidx.media3.ui.PlayerView
+                  android:id="@+id/player_view"
+                  android:layout_width="match_parent"
+                  android:layout_height="220dp"
+                  android:visibility="gone"
+                  app:use_controller="true" />
+
+              <WebView
+                  android:id="@+id/web_view"
+                  android:layout_width="match_parent"
+                  android:layout_height="0dp"
+                  android:layout_weight="1" />
+
+              <WebView
+                  android:id="@+id/web_view2"
+                  android:layout_width="match_parent"
+                  android:layout_height="0dp"
+                  android:layout_marginTop="6dp"
+                  android:layout_weight="1" />
+          </LinearLayout>
+          END_FILE_6
+          cat > app/src/main/java/com/example/bgvideo/MainActivity.java <<'END_FILE_7'
+          package com.example.bgvideo;
+
+          import android.Manifest;
+          import android.annotation.SuppressLint;
+          import android.content.ComponentName;
+          import android.content.pm.PackageManager;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.webkit.WebResourceError;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.TextView;
+          import android.widget.Toast;
+
+          import androidx.activity.OnBackPressedCallback;
+          import androidx.activity.result.ActivityResultLauncher;
+          import androidx.activity.result.contract.ActivityResultContracts;
+          import androidx.appcompat.app.AppCompatActivity;
+          import androidx.core.content.ContextCompat;
+          import androidx.media3.common.MediaItem;
+          import androidx.media3.common.PlaybackException;
+          import androidx.media3.common.Player;
+          import androidx.media3.session.MediaController;
+          import androidx.media3.session.SessionToken;
+          import androidx.media3.ui.PlayerView;
+
+          import com.google.common.util.concurrent.ListenableFuture;
+
+          import java.util.List;
+          import java.util.Locale;
+
+          public class MainActivity extends AppCompatActivity {
+
+              private EditText urlInput;
+              private TextView statusText;
+              private PlayerView playerView;
+              private WebView webView;
+              private WebView webView2;
+              private String lastWebUrl = null;
+
+              private ListenableFuture<MediaController> controllerFuture;
+              private MediaController controller;
+
+              private final ActivityResultLauncher<String> notificationPermission =
+                      registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                          if (!granted) {
+                              toast("Notifications are off, so lock-screen controls will not appear");
+                          }
+                      });
+
+              private final Player.Listener playerListener = new Player.Listener() {
+                  @Override
+                  public void onIsPlayingChanged(boolean isPlaying) {
+                      setStatus(isPlaying ? "Playing (muted)" : "Paused");
+                  }
+
+                  @Override
+                  public void onPlaybackStateChanged(int state) {
+                      if (state == Player.STATE_BUFFERING) setStatus("Buffering...");
+                      else if (state == Player.STATE_ENDED) setStatus("Finished");
+                  }
+
+                  @Override
+                  public void onPlayerError(PlaybackException error) {
+                      setStatus("Playback error: " + error.getErrorCodeName());
+                  }
+              };
+
+              @SuppressLint("SetJavaScriptEnabled")
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setContentView(R.layout.activity_main);
+
+                  urlInput = findViewById(R.id.url_input);
+                  statusText = findViewById(R.id.status_text);
+                  playerView = findViewById(R.id.player_view);
+                  webView = findViewById(R.id.web_view);
+                  webView2 = findViewById(R.id.web_view2);
+                  Button reloadBtn = findViewById(R.id.reload_btn);
+                  Button loadBtn = findViewById(R.id.load_btn);
+                  Button stopBtn = findViewById(R.id.stop_btn);
+
+                  setupWebView(webView);
+                  setupWebView(webView2);
+
+                  loadBtn.setOnClickListener(v -> loadUrl());
+                  stopBtn.setOnClickListener(v -> stopPlayback());
+                  reloadBtn.setOnClickListener(v -> {
+                      if (lastWebUrl != null) showWebPage(lastWebUrl);
+                      else toast("Load a link first");
+                  });
+
+                  getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+                      @Override
+                      public void handleOnBackPressed() {
+                          if (webView.getVisibility() == View.VISIBLE && webView.canGoBack()) {
+                              webView.goBack();
+                          } else {
+                              setEnabled(false);
+                              getOnBackPressedDispatcher().onBackPressed();
+                          }
+                      }
+                  });
+
+                  // Android 13+: runtime permission needed to show the media notification
+                  if (Build.VERSION.SDK_INT >= 33
+                          && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                          != PackageManager.PERMISSION_GRANTED) {
+                      notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS);
+                  }
+              }
+
+              @Override
+              protected void onStart() {
+                  super.onStart();
+                  webView.onResume();
+                  webView2.onResume();
+                  SessionToken token = new SessionToken(this, new ComponentName(this, PlaybackService.class));
+                  controllerFuture = new MediaController.Builder(this, token).buildAsync();
+                  controllerFuture.addListener(() -> {
+                      try {
+                          controller = controllerFuture.get();
+                          controller.addListener(playerListener);
+                          if (controller.getMediaItemCount() > 0) {
+                              playerView.setVisibility(View.VISIBLE);
+                              playerView.setPlayer(controller); // reattach to ongoing playback
+                          }
+                      } catch (Exception e) {
+                          setStatus("Could not connect to the player service");
+                      }
+                  }, ContextCompat.getMainExecutor(this));
+              }
+
+              @Override
+              protected void onStop() {
+                  // Playback continues in PlaybackService; only the UI detaches here.
+                  playerView.setPlayer(null);
+                  if (controller != null) {
+                      controller.removeListener(playerListener);
+                      controller = null;
+                  }
+                  if (controllerFuture != null) {
+                      MediaController.releaseFuture(controllerFuture);
+                      controllerFuture = null;
+                  }
+                  webView.onPause();
+                  webView2.onPause();
+                  super.onStop();
+              }
+
+              @Override
+              protected void onDestroy() {
+                  webView.loadUrl("about:blank");
+                  webView.destroy();
+                  webView2.loadUrl("about:blank");
+                  webView2.destroy();
+                  super.onDestroy();
+              }
+
+              // ---------- Load ----------
+
+              private void loadUrl() {
+                  String raw = urlInput.getText().toString().trim();
+                  if (raw.isEmpty()) {
+                      setStatus("Enter a URL first");
+                      return;
+                  }
+                  if (raw.toLowerCase(Locale.ROOT).startsWith("http://")) {
+                      setStatus("Only https:// links are allowed");
+                      return;
+                  }
+                  if (!raw.toLowerCase(Locale.ROOT).startsWith("https://")) {
+                      raw = "https://" + raw;
+                  }
+                  if (raw.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|webm|m3u8)([?#].*)?$")) {
+                      playDirect(raw);
+                  } else {
+                      showWebPage(raw);
+                  }
+              }
+
+              private void playDirect(String url) {
+                  if (controller == null) {
+                      toast("Player is still connecting, try again");
+                      return;
+                  }
+                  webView.loadUrl("about:blank");
+                  webView.setVisibility(View.GONE);
+                  webView2.loadUrl("about:blank");
+                  webView2.setVisibility(View.GONE);
+                  playerView.setVisibility(View.VISIBLE);
+                  playerView.setPlayer(controller);
+
+                  controller.setMediaItem(MediaItem.fromUri(url));
+                  controller.prepare();
+                  controller.play();
+                  setStatus("Loading...");
+              }
+
+              private void showWebPage(String raw) {
+                  lastWebUrl = raw;
+                  if (controller != null) {
+                      controller.pause();
+                  }
+                  playerView.setVisibility(View.GONE);
+                  webView.setVisibility(View.VISIBLE);
+                  webView2.setVisibility(View.VISIBLE);
+
+                  Uri uri = Uri.parse(raw);
+                  String ytId = youTubeId(uri);
+                  String igEmbed = instagramEmbed(uri);
+
+                  if (!ytId.isEmpty()) {
+                      // autoplay + muted + loop (muted autoplay is allowed by the player)
+                      String html = "<html><body style='margin:0;background:#000'>"
+                              + "<iframe width='100%' height='100%' src='https://www.youtube.com/embed/" + ytId
+                              + "?playsinline=1&autoplay=1&mute=1&loop=1&playlist=" + ytId + "' frameborder='0' "
+                              + "allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe>"
+                              + "</body></html>";
+                      webView.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null);
+                      webView2.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null);
+                      setStatus("YouTube in 2 players (autoplay, muted, loop)");
+                  } else if (!igEmbed.isEmpty()) {
+                      webView.loadUrl(igEmbed);
+                      webView2.loadUrl(igEmbed);
+                      setStatus("Instagram in 2 players (public posts only)");
+                  } else {
+                      webView.loadUrl(raw);
+                      webView2.loadUrl(raw);
+                      setStatus("Page loaded in 2 views (browsing only)");
+                  }
+              }
+
+              @SuppressLint("SetJavaScriptEnabled")
+              private void setupWebView(WebView w) {
+                  WebSettings ws = w.getSettings();
+                  ws.setJavaScriptEnabled(true);
+                  ws.setDomStorageEnabled(true);
+                  ws.setMediaPlaybackRequiresUserGesture(false);
+                  w.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                          if (request.isForMainFrame()) toast("Page failed to load");
+                      }
+                  });
+              }
+
+              private void stopPlayback() {
+                  if (controller != null) {
+                      controller.stop();
+                      controller.clearMediaItems();
+                  }
+                  playerView.setVisibility(View.GONE);
+                  setStatus("Stopped");
+              }
+
+              // ---------- URL helpers ----------
+
+              private String youTubeId(Uri u) {
+                  String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
+                  if (host.startsWith("www.")) host = host.substring(4);
+                  if (host.startsWith("m.")) host = host.substring(2);
+                  List<String> seg = u.getPathSegments();
+                  String id = "";
+                  if (host.equals("youtu.be")) {
+                      if (!seg.isEmpty()) id = seg.get(0);
+                  } else if (host.equals("youtube.com")) {
+                      String v = u.getQueryParameter("v");
+                      if (v != null) {
+                          id = v;
+                      } else if (seg.size() >= 2 && (seg.get(0).equals("shorts")
+                              || seg.get(0).equals("embed") || seg.get(0).equals("live"))) {
+                          id = seg.get(1);
+                      }
+                  }
+                  return id.matches("[A-Za-z0-9_-]{6,20}") ? id : "";
+              }
+
+              private String instagramEmbed(Uri u) {
+                  String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
+                  if (host.startsWith("www.")) host = host.substring(4);
+                  if (!host.equals("instagram.com")) return "";
+                  List<String> seg = u.getPathSegments();
+                  for (int i = 0; i < seg.size() - 1; i++) {
+                      String s = seg.get(i);
+                      if (s.equals("p") || s.equals("reel") || s.equals("tv")) {
+                          return "https://www.instagram.com/" + s + "/" + seg.get(i + 1) + "/embed/";
+                      }
+                  }
+                  return "";
+              }
+
+              // ---------- UI helpers ----------
+
+              private void setStatus(String s) {
+                  statusText.setText("Status: " + s);
+              }
+
+              private void toast(String s) {
+                  Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
+              }
+          }
+          END_FILE_7
+          cat > app/src/main/java/com/example/bgvideo/PlaybackService.java <<'END_FILE_8'
+          package com.example.bgvideo;
+
+          import android.app.PendingIntent;
+          import android.content.Intent;
+
+          import androidx.annotation.Nullable;
+          import androidx.annotation.OptIn;
+          import androidx.media3.common.AudioAttributes;
+          import androidx.media3.common.C;
+          import androidx.media3.common.util.UnstableApi;
+          import androidx.media3.exoplayer.ExoPlayer;
+          import androidx.media3.session.DefaultMediaNotificationProvider;
+          import androidx.media3.session.MediaSession;
+          import androidx.media3.session.MediaSessionService;
+
+          /**
+           * Foreground media service. The player lives here, not in the Activity,
+           * so playback continues when the app is in the background or the screen is off.
+           * MediaSessionService posts the media notification, starts/stops foreground
+           * automatically and exposes lock-screen Play/Pause controls.
+           */
+          @OptIn(markerClass = UnstableApi.class)
+          public class PlaybackService extends MediaSessionService {
+
+              private static final String CHANNEL_ID = "video_playback";
+
+              private ExoPlayer player;
+              private MediaSession mediaSession;
+
+              @Override
+              public void onCreate() {
+                  super.onCreate();
+
+                  // Notification channel (created by the provider, API 26+)
+                  setMediaNotificationProvider(
+                          new DefaultMediaNotificationProvider.Builder(this)
+                                  .setChannelId(CHANNEL_ID)
+                                  .setChannelName(R.string.channel_name)
+                                  .build());
+
+                  player = new ExoPlayer.Builder(this)
+                          // false = do not take audio focus (video is muted)
+                          .setAudioAttributes(new AudioAttributes.Builder()
+                                  .setUsage(C.USAGE_MEDIA)
+                                  .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                                  .build(), false)
+                          .setHandleAudioBecomingNoisy(true)
+                          // keeps CPU and Wi-Fi awake only while playing
+                          .setWakeMode(C.WAKE_MODE_NETWORK)
+                          .build();
+                  player.setVolume(0f); // video without audio
+
+                  PendingIntent openApp = PendingIntent.getActivity(
+                          this, 0,
+                          new Intent(this, MainActivity.class),
+                          PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+                  mediaSession = new MediaSession.Builder(this, player)
+                          .setSessionActivity(openApp)
+                          .build();
+              }
+
+              @Nullable
+              @Override
+              public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
+                  return mediaSession;
+              }
+
+              // User swiped the app away: stop playback and the service (saves battery)
+              @Override
+              public void onTaskRemoved(@Nullable Intent rootIntent) {
+                  player.pause();
+                  stopSelf();
+              }
+
+              @Override
+              public void onDestroy() {
+                  if (mediaSession != null) {
+                      mediaSession.release();
+                      mediaSession = null;
+                  }
+                  if (player != null) {
+                      player.release();
+                      player = null;
+                  }
+                  super.onDestroy();
+              }
+          }
+          END_FILE_8
+
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
 
